@@ -48,6 +48,7 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
             $this->$setting_key = $value;
         }
 
+		add_action( 'woocommerce_thankyou_' . $this->id, array( $this, 'receipt_page' ) );
         add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
         add_action( 'woocommerce_receipt_' . $this->id, array( $this, 'receipt_page' ) );
         
@@ -79,6 +80,13 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
                 'desc_tip'  => __( 'Descrição do meio de pagamento que os compradores visualizarão durante o processo de finalização de compra.', 'wc-yapay_intermediador-bs' ),
                 'default'   => __( 'A maneira mais fácil e segura e comprar pela internet.', 'wc-yapay_intermediador-bs' ),
                 'css'       => 'max-width:350px;'
+            ),
+			'dias_vencimento_boleto' => array(
+                'title'     => __( 'Dias para vencimento do boleto', 'wc-yapay_intermediador-bs' ),
+                'type'      => 'text',
+                'desc_tip'  => __( 'Insira quantidade de dias para vencimento do boleto.', 'wc-yapay_intermediador-bs' ),
+				'required' => 'required',
+				'default'   => '1',
             ),
             'environment' => array(
                 'title'     => __( 'Sandbox', 'wc-yapay_intermediador-bs' ),
@@ -122,10 +130,10 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
         if ( $description = $this->get_description() ) {
                 echo wpautop( wptexturize( $description ) );
         }
-        
-        woocommerce_get_template( $this->id.'_form.php', array(
+        $template = $this->id;
+        wc_get_template( $template.'_form.php', array(
                 'url_images'           => plugins_url( 'woo-yapay/assets/images/', plugin_dir_path( __FILE__ ) )
-        ), 'woocommerce/'.$this->id.'/', plugin_dir_path( __FILE__ ) . 'templates/' );
+        ), 'woocommerce/'.$template.'/', plugin_dir_path( __FILE__ ) . 'templates/' );
     }
     
     public function add_error( $messages ) {
@@ -159,7 +167,7 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
         
         include_once("includes/class-wc-yapay_intermediador-request.php");
 
-        $order = new WC_Order( $order_id );
+        $order = wc_get_order( $order_id );
 
 
         $params["token_account"] = $this->get_option("token_account");
@@ -251,9 +259,28 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
         
         if($shipping_type != ""){
             $params["transaction[shipping_type]"] = $shipping_type;
-            $params["transaction[shipping_price]"] = $order->order_shipping;
+            $params["transaction[shipping_price]"] = $order->get_shipping_total();
         }
-        $params["transaction[price_discount]"] = $order->discount_total;
+		// OBTER DESCONTOS
+		$the_order = wc_get_order( $order_id );
+		$fee_total = 0;
+		// BUSCAR DESCONTO APLICADOS NO PEDIDO
+		foreach( $the_order->get_items('fee') as $item_id => $item_fee ){
+
+    	// NOME DO DESCONTO
+   		 $fee_name = $item_fee->get_name();
+
+    	// VALOR TOTAL DO DESCONTO
+    	$fee_total = $fee_total + $item_fee->get_total();
+
+    	// VALOR TOTAL DA TAXA COM DESCONTO
+    	$fee_total_tax = $item_fee->get_total_tax();
+		}
+		$fee_total = abs($fee_total);
+		$fee_total = $fee_total + $the_order->get_total_discount();
+		$params["transaction[price_discount]"] = $fee_total;
+		
+		//$params["transaction[price_discount]"] = $order->discount_total;
         $params["transaction[url_notification]"] = $this->get_wc_request_url($order_id);
         $params["transaction[available_payment_methods]"] = "6";
         
@@ -269,6 +296,37 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
         }
         
         $params["payment[payment_method_id]"] = "6";
+		
+		//////////////////            CALCULAR DATA VENCIMENTO DO BOLETO         //////////////////////////
+		$dias_vencimeto = $this->get_option("dias_vencimento_boleto");
+		//$dias_vencimeto = 1;
+		
+		date_default_timezone_set('America/Sao_Paulo');
+		$data_vencimento = date( 'd/m/Y', time() + ( $dias_vencimeto * 86400 ) );
+		$datetime = DateTime::createFromFormat('d/m/Y', $data_vencimento);
+		
+		//$timestamp = strtotime($data_vencimento);
+		
+				
+		$feriados = array( '01/01', '21/04', '15/11', '20/11', '25/12', '31/12' );
+		if(in_array($datetime->format('d/m'), $feriados) ){
+			$datetime->modify('+1 day');
+		}
+		 
+		$dia_semana = $datetime->format("l");
+		
+		if($dia_semana == 'Saturday' ){
+			$datetime->modify('+2 days');
+		}else{
+			if($dia_semana == 'Sunday'){
+				$datetime->modify('+1 day');
+			}
+		}
+		$params["payment[billet_date_expiration]"] =  $datetime->format('d/m/Y');
+		$data_vencimento_interno = $datetime->format('Y-m-d');
+        update_post_meta( $order->id, 'data_vencimento_boleto', $data_vencimento_interno );
+		//////////////////            CALCULAR DATA VENCIMENTO DO BOLETO         //////////////////////////
+		
         $params["payment[split]"] = "1";
 
         $tcRequest = new WC_Yapay_Intermediador_Request();
@@ -288,7 +346,6 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
             $transactionParams["token_transaction"] = (string)$tcResponse->data_response->transaction->token_transaction;
             $transactionParams["url_payment"] = (string)$tcResponse->data_response->transaction->payment->url_payment;
             $transactionParams["typeful_line"] = (string)$tcResponse->data_response->transaction->payment->linha_digitavel;
-            
             $transactionData->addTransaction($transactionParams);
 
             if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '2.1', '>=' ) ) {
@@ -299,11 +356,10 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
             if(!isset($use_shipping)){
                 $use_shipping = isset($use_shipping);
             }
-            
             if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '2.1', '>=' ) ) {
                 return array(
                     'result'   => 'success',
-                    'redirect' => add_query_arg( array( 'use_shipping' => $use_shipping ), $order->get_checkout_payment_url( true ) )
+                    'redirect' => add_query_arg( array( 'use_shipping' => $use_shipping ), $order->get_checkout_order_received_url())
                 );
             } else {
                 return array(
@@ -335,36 +391,43 @@ class WC_Yapay_Intermediador_Bankslip_Gateway extends WC_Payment_Gateway {
         return true; 
     }
     
-    public function receipt_page( $order_id ) {
+	public function receipt_page( $order_id ) {
         global $woocommerce;
 
         $order        = new WC_Order( $order_id );
         $request_data = $_POST;
         
         include_once("includes/class-wc-yapay_intermediador-transactions.php");
-            
+		
         $transactionData = new WC_Yapay_Intermediador_Transactions();
         
+		
         $tcTransaction = $transactionData->getTransactionByOrderId($this->get_option("prefixo").$order_id);
 
         $html = "";
+		$html .= "<div class='woocommerce-message'>";
+		$html .= "<span>";
         $html .= "<ul class='order_details'>";
         $html .= "<li>";
-        $html .= "Número da Transação:<strong>{$tcTransaction->transaction_id}</strong>";
+        $html .= "Número da Transação: <strong>{$tcTransaction->transaction_id}</strong>";
         $html .= "</li>";
         $html .= "<li>";
         $html .= "<a href='{$tcTransaction->url_payment}' target='_blank' class='button'>Imprimir Boleto</a>";
         $html .= "</li>";
         $html .= "<li>";
-        $html .= "Linha Digitável do Boleto:<strong>{$tcTransaction->typeful_line}</strong>";
+        $html .= "Linha Digitável do Boleto: <strong>{$tcTransaction->typeful_line}</strong>";
         $html .= "</li>";
         $html .= "</ul>";
+		$html .= "</span>";
+		$html .= "</div>";
         
         echo $html;
 
-
-        $order->update_status( 'on-hold', 'Pedido registrado no Yapay Intermediador. Transação: '.$tcTransaction->transaction_id );
-
+		if($order->get_status() == "pending"){
+        	$order->update_status( 'on-hold', 'Pedido registrado no Yapay Intermediador. Transação: '.$tcTransaction->transaction_id );
+		}
+		update_post_meta( $order->id, 'linha_digitavel', preg_replace( '([^0-9])', '', $tcTransaction->typeful_line ) );
+		update_post_meta( $order->id, 'link_boleto', $tcTransaction->url_payment );		
     }
 }
 endif;
