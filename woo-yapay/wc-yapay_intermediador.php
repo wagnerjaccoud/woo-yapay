@@ -5,7 +5,7 @@
  * Description: Intermediador de pagamento Yapay para a plataforma WooCommerce.
  * Author: Integração Yapay Intermediador
  * Author URI: http://dev.yapay.com.br/
- * Version: 0.5.2
+ * Version: 0.6.0
  * Text Domain: woo-yapay
  */
 
@@ -37,6 +37,55 @@ function wc_gateway_yapay_intermediador_init() {
         return $methods;
     }
 }
+
+//////////////////// INICIO NOVO STATUS //////////////////////////
+function register_contestacao_order_status() {
+    register_post_status( 'wc-contestacao', array(
+        'label'                     => 'Em Contestação',
+        'public'                    => true,
+        'show_in_admin_status_list' => true,
+        'show_in_admin_all_list'    => true,
+        'exclude_from_search'       => false,
+        'label_count'               => _n_noop( 'Em Contestação <span class="count">(%s)</span>', 'Em contestação <span class="count">(%s)</span>' )
+    ) );
+}
+add_action( 'init', 'register_contestacao_order_status' );
+function add_contestacao_order_statuses( $order_statuses ) {
+    $new_order_statuses = array();
+    foreach ( $order_statuses as $key => $status ) {
+        $new_order_statuses[ $key ] = $status;
+        if ( 'wc-processing' === $key ) {
+            $new_order_statuses['wc-contestacao'] = 'Em Contestação';
+        }
+    }
+    return $new_order_statuses;
+}
+add_filter( 'wc_order_statuses', 'add_contestacao_order_statuses' );
+
+function register_monitoramento_order_status() {
+    register_post_status( 'wc-monitoramento', array(
+        'label'                     => 'Em Monitoramento',
+        'public'                    => true,
+        'show_in_admin_status_list' => true,
+        'show_in_admin_all_list'    => true,
+        'exclude_from_search'       => false,
+        'label_count'               => _n_noop( 'Em Monitoramento <span class="count">(%s)</span>', 'Em Monitoramento <span class="count">(%s)</span>' )
+    ) );
+}
+add_action( 'init', 'register_monitoramento_order_status' );
+function add_monitoramento_order_statuses( $order_statuses ) {
+    $new_order_statuses = array();
+    foreach ( $order_statuses as $key => $status ) {
+        $new_order_statuses[ $key ] = $status;
+        if ( 'wc-processing' === $key ) {
+            $new_order_statuses['wc-monitoramento'] = 'Em Monitoramento';
+        }
+    }
+    return $new_order_statuses;
+}
+add_filter( 'wc_order_statuses', 'add_monitoramento_order_statuses' );
+
+//////////////////// FIM NOVO STATUS //////////////////////////
 
 add_action('admin_menu', 'wc_gateway_yapay_intermediador_log_menu');
 
@@ -212,39 +261,62 @@ function wc_yapay_intermediador_notification() {
             $comment = $codeStatus . ' - ' . $tcResponse->data_response->transaction->status_name;
             
             switch ($codeStatus) {
-                case 4: 
-                case 5: 
-                case 88: 
+                case 4:
+                case 5:
+                case 88:
                         if($order->get_status() != "on-hold"){
-                            $order->update_status( 'on-hold', 'Yapay Intermediador enviou automaticamente o status: '.$comment .". | " );
+							$order->add_order_note( 'Yapay Intermediador enviou automaticamente o status: '.$comment  );
                         }else{
-                            $order->add_order_note( 'Yapay Intermediador enviou automaticamente o status: '.$comment  );
-                        }
+							if($order->get_payment_method() == 'wc_yapay_intermediador_cc' ) {
+								if($order->get_status() == "failed"){
+							//$order->add_order_note( 'Yapay Intermediador enviou automaticamente o status: '.$comment  );
+                        }else{
+						 		$order->update_status( 'failed', 'Yapay Intermediador enviou automaticamente o status: '.$comment .". | " );
+								$order->add_order_note( 'Houve falha no pagamento. EX: dados incorretos, saldo insuficiente, cartão com restrição....' );
+						}
+                        	}
+						}
                     break;
-                case 6 : 
+                case 6 :
+						if($order->get_status() == "wc-contestacao"){
+							$order->update_status( 'completed', 'Confirmação de envio foi válida!'  );
+						}else{
                         $order->add_order_note( 'Yapay Intermediador - Aprovado. Pagamento confirmado automaticamente.' );
                         $order->payment_complete();
+						}
                     break;
-                case 24 : 
+                case 24 :
                         if($order->get_status() != "on-hold"){
-                            $order->update_status( 'on-hold', 'Yapay Intermediador enviou automaticamente o status: '.$comment .". | " );
+                            $order->update_status( 'wc-contestacao', 'Yapay Intermediador enviou automaticamente o status: '.$comment .". | " );
+                            $order->add_order_note( 'Yapay Intermediador enviou automaticamente o status: '.$comment  );
                         }else{
                             $order->add_order_note( 'Yapay Intermediador enviou automaticamente o status: '.$comment  );
                         }
                     break;
-                case 7 : 
-                case 89 :  
+                case 7 :
+						if($order->get_status() == "processing"){
+							$order->update_status( 'cancelled', 'Yapay Intermediador - Cancelado. Pedido cancelado automaticamente pelo painel Yapay' );
+						}
+						break;
+                case 89 :
                         if($order->get_status() != "cancelled"){
-                            $order->update_status( 'cancelled', 'Yapay Intermediador - Cancelado. Pedido cancelado automaticamente (transação foi cancelada, pagamento foi negado, pagamento foi estornado ou ocorreu um chargeback). | ' );
+                            //$order->update_status( 'cancelled', 'Yapay Intermediador - Cancelado. Pedido cancelado automaticamente (transação foi cancelada, pagamento foi negado, pagamento foi estornado ou ocorreu um chargeback). | ' );
+                         	if($order->get_payment_method() == 'wc_yapay_intermediador_bs' ) {
+						 		$order->update_status( 'cancelled', 'Yapay Intermediador - Cancelado. Pedido cancelado automaticamente (transação foi cancelada, pagamento foi negado, pagamento foi estornado ou ocorreu um chargeback). | ' );		} else{
+                            	$order->update_status( 'failed', 'Yapay Intermediador enviou automaticamente o status: '.$comment .". | " );
+							}
                         }else{
                             $order->add_order_note( 'Yapay Intermediador - Cancelado. Pedido cancelado automaticamente (transação foi cancelada, pagamento foi negado, pagamento foi estornado ou ocorreu um chargeback).'  );
                         }
                     break;
-                case 87 :  
+                case 87 :
                         if($order->get_status() != "on-hold"){
-                            $order->update_status( 'on-hold', 'Yapay Intermediador enviou automaticamente o status: '.$comment .". | " );
+                            $order->add_order_note( 'Yapay Intermediador enviou automaticamente o status: '.$comment  );
                         }else{
                             $order->add_order_note( 'Yapay Intermediador enviou automaticamente o status: '.$comment  );
+							update_post_meta( $order->id, 'status_pagamento', 'em monitoramento' );
+							//$order->update_status( 'wc-monitoramento', 'Status atulizado motivo: '.$comment .". | " );
+							$order->add_order_note( 'O pagamento foi capturado e está em revisão pela equipe Yapay' );
                         }
                     break;
 
@@ -418,11 +490,11 @@ if ( ! function_exists( 'mv_add_other_fields_for_packaging' ) )
 
 function sendRastreioYapay($order_id, $code, $url) {
 
+
     $order_id = $_POST['order_id'];
     $code = $_POST['code'];
     $url = $_POST['url'];
 
-    var_dump($_POST);
 
     $order  = new WC_Order( $order_id );
 
@@ -430,8 +502,14 @@ function sendRastreioYapay($order_id, $code, $url) {
     include_once("includes/class-wc-yapay_intermediador-transactions.php");
     include_once("includes/class-wc-yapay_intermediador-request.php");
 
+    switch ($order->payment_method) {
+        case "wc_yapay_intermediador_bs": $tcConfig = new WC_Yapay_Intermediador_Bankslip_Gateway(); break;
+        case "wc_yapay_intermediador_cc": $tcConfig = new WC_Yapay_Intermediador_Creditcard_Gateway(); break;
+        case "wc_yapay_intermediador_tef": $tcConfig = new WC_Yapay_Intermediador_Tef_Gateway(); break;
+        default: $tcConfig = new WC_Yapay_Intermediador_Creditcard_Gateway();break;
+    }
 
-    $tcConfig = new WC_Yapay_Intermediador_Creditcard_Gateway();    
+    // $tcConfig = new WC_Yapay_Intermediador_Creditcard_Gateway();    
     $transactionData = new WC_Yapay_Intermediador_Transactions();
     $tcTransaction = $transactionData->getTransactionByOrderId($tcConfig->get_option("prefixo").$order_id);
 
@@ -451,6 +529,7 @@ function sendRastreioYapay($order_id, $code, $url) {
 
     $tcRequest = new WC_Yapay_Intermediador_Request();        
     $tcResponse = $tcRequest->requestData("v3/sales/trace",$params,$environment);
+
 
 
     $order->add_order_note('Enviado para Yapay o código de rastreio: ' . $code);

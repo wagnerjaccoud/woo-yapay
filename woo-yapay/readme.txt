@@ -3,7 +3,7 @@ Contributors: Integração Yapay
 Tags: woocommerce, yapay, intermediador, yapay intermediador, payment
 Requires at least: 3.5
 Tested up to: 5.2.2
-Stable tag: 0.5.2
+Stable tag: 0.5.5
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -146,3 +146,24 @@ Ajuste no javascript
 = 0.5.2 = 09/10/2019
 
 Ajuste no css das bandeiras do cartão de crédito.
+
+
+= 0.5.3 = 24/02/2020
+
+Alterar página de finalização de compra para order-received.
+
+Ajustar input do ano do cartão de crédito para dois digitos, ficando MM / YY.
+
+Ajuste no checkout, não será permitido digitar letras no campo de NÚMERO DO CARTÃO.
+
+Ajuste no checkout, não será permitido digitar números no campo de NOME DO CARTÃO.
+
+
+= 0.5.4 = 24/02/2020
+
+Correção Envio de Código de Rastreio do pedido
+
+
+= 0.5.5 = 29/02/2020
+
+Bug fix função receitp_page
