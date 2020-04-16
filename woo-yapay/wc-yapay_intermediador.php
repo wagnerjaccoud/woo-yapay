@@ -87,6 +87,71 @@ add_filter( 'wc_order_statuses', 'add_monitoramento_order_statuses' );
 
 //////////////////// FIM NOVO STATUS //////////////////////////
 
+/////////////////////////////////////// BOTAO BOLETO PARA CLIENTE E ADMIM //////////////////////////////////////
+function botao_imprimir_boleto_my_table( $actions, $order ) {
+
+$gateway = $order->get_payment_method();
+$order_status  = $order->get_status();
+    if( $order_status == 'on-hold' ){
+        if($gateway == 'wc_yapay_intermediador_bs' ){   
+            $actions['name'] = array(
+             'url'  =>  '' . $order->get_meta( 'link_boleto' ) . '',
+             'name' => 'Imprimir Boleto',
+         );
+        }
+    }
+        return $actions;
+    
+}
+add_filter( 'woocommerce_my_account_my_orders_actions', 'botao_imprimir_boleto_my_table', 10, 2 );
+// função para habilitar imprimir boleto na tela de pedidos do cliente **FIM
+
+//botao boleto adm **INICIO
+add_filter( 'woocommerce_admin_order_actions', 'add_custom_order_status_actions_button', 100, 2 );
+function add_custom_order_status_actions_button( $actions, $order ) {
+    // Display the button for all orders that have a 'processing' status
+    $gateway = $order->get_payment_method();
+    if($gateway == 'wc_yapay_intermediador_bs'){    
+    if ( $order->has_status( array( 'on-hold' ) ) ) {
+
+        // The key slug defined for your action button
+        $action_slug = 'boleto';
+
+        // Set the action button
+        $actions[$action_slug] = array(
+            'url'       => $order->get_meta( 'link_boleto' ),
+            'name'      => __( 'Boleto', 'woocommerce' ),
+            'action'    => $action_slug,
+        );
+        }
+    }
+    $gateway = $order->get_payment_method();
+    if($gateway == 'pagarme-banking-ticket'){    
+    if ( $order->has_status( array( 'on-hold' ) ) ) {
+
+        // The key slug defined for your action button
+        $action_slug = 'boleto';
+
+        // Set the action button
+        $actions[$action_slug] = array(
+            'url'       => $order->get_meta( 'Link do boleto bancário' ),
+            'name'      => __( 'Boleto', 'woocommerce' ),
+            'action'    => $action_slug,
+        );
+        }
+    }
+    return $actions;
+}
+
+// Set Here the WooCommerce icon for your action button
+add_action( 'admin_head', 'add_custom_order_status_actions_button_css' );
+function add_custom_order_status_actions_button_css() {
+    $action_slug = "boleto"; // The key slug defined for your action button
+
+    echo '<style>.wc-action-button-'.$action_slug.'::after { font-family: fontawesome !important; content: "\f02a" !important; }</style>';
+}
+/////////////////////////////////////// BOTAO BOLETO PARA CLIENTE E ADMIM //////////////////////////////////////
+
 add_action('admin_menu', 'wc_gateway_yapay_intermediador_log_menu');
 
 function wc_gateway_yapay_intermediador_log_menu() {
