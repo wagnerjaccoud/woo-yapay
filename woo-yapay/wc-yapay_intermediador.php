@@ -125,21 +125,6 @@ function add_custom_order_status_actions_button( $actions, $order ) {
         );
         }
     }
-    $gateway = $order->get_payment_method();
-    if($gateway == 'pagarme-banking-ticket'){    
-    if ( $order->has_status( array( 'on-hold' ) ) ) {
-
-        // The key slug defined for your action button
-        $action_slug = 'boleto';
-
-        // Set the action button
-        $actions[$action_slug] = array(
-            'url'       => $order->get_meta( 'Link do boleto bancário' ),
-            'name'      => __( 'Boleto', 'woocommerce' ),
-            'action'    => $action_slug,
-        );
-        }
-    }
     return $actions;
 }
 
