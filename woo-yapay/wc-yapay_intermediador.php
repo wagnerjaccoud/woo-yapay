@@ -689,5 +689,6 @@ function enviarRastreioYapay($data) {
         break;
       }
     }
+return $data;
 }
 ///////////////////////////////// ENVIAR RASTREAMENTO CORREIOS AUTOMATICAMENTE ////////////////////////////////////
