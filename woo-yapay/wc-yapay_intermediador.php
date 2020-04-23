@@ -591,3 +591,103 @@ function sendRastreioYapay($order_id, $code, $url) {
 
 add_action( 'wp_ajax_sendRastreioYapay', 'sendRastreioYapay' );
 add_action( 'wp_ajax_nopriv_sendRastreioYapay', 'sendRastreioYapay' );
+
+///////////////////////////////// ENVIAR RASTREAMENTO CORREIOS AUTOMATICAMENTE ////////////////////////////////////
+add_filter( 'woocommerce_new_order_note_data', array( $this, 'enviarRastreioYapay' ) );
+
+public function enviarRastreioYapay($data) {
+    $note        = $data['comment_content'];
+    $order_id    = $data['comment_post_ID'];
+    $valid_terms = array(
+      'Added a Correios tracking code',
+      'Adicionado o código de rastreamento dos Correios',
+    );
+	
+	foreach ( $valid_terms as $valid_terms ) {
+      if ( strpos( $note, $valid_terms ) !== false ) {
+        $order = wc_get_order( $order_id );
+        if ( $order ) {
+			
+    		$code = $order->get_meta( '_correios_tracking_code' );
+    	   
+			$gateway = $order->get_payment_method();
+	
+			if($gateway == 'wc_yapay_intermediador_cc' || $gateway == 'wc_yapay_intermediador_bs' ){
+
+				include_once("wp-content/plugins/woo-yapay/includes/class-wc-yapay_intermediador-transactions.php");
+				include_once("wp-content/plugins/woo-yapay/includes/class-wc-yapay_intermediador-request.php");
+				include_once("wp-content/plugins/woo-yapay/class-wc-yapay_intermediador-creditcard-gateway.php");
+
+				switch ($order->payment_method) {
+					case "wc_yapay_intermediador_bs": $tcConfig = new WC_Yapay_Intermediador_Bankslip_Gateway(); break;
+					case "wc_yapay_intermediador_cc": $tcConfig = new WC_Yapay_Intermediador_Creditcard_Gateway(); break;
+					case "wc_yapay_intermediador_tef": $tcConfig = new WC_Yapay_Intermediador_Tef_Gateway(); break;
+					default: $tcConfig = new WC_Yapay_Intermediador_Creditcard_Gateway();break;
+    			}
+		    
+				$transactionData = new WC_Yapay_Intermediador_Transactions();
+				$tcTransaction = $transactionData->getTransactionByOrderId($tcConfig->get_option("prefixo").$order_id);
+
+				$token_transaction = $tcTransaction->token_transaction;
+				$idTransacao = $tcTransaction->transaction_id;
+
+				$token_account = $tcConfig->get_option("token_account");
+				$environment = $tcConfig->get_option("environment");
+
+				$params["token_account"] = $token_account;
+				$params["id"] = $idTransacao;
+				$params["transaction_token"] = $token_transaction;
+				$params["code"] = $code;
+				$params["posted_date"] = time();
+
+				$urlPost = 'https://api.intermediador.yapay.com.br/api/v3/sales/trace';
+
+				$requestData = new WC_Yapay_Intermediador_Requests();
+
+				$paramRequests["request_params"] = $params;
+				$paramRequests["request_url"] = $urlPost;
+        
+        		$requestData->addRequest($paramRequests,$environment);
+        
+   			 	$ch = curl_init ( $urlPost );
+        
+				curl_setopt ( $ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1 );
+				curl_setopt ( $ch, CURLOPT_POST, 1 );
+				curl_setopt ( $ch, CURLOPT_RETURNTRANSFER, 1 );
+				curl_setopt ( $ch, CURLOPT_POSTFIELDS, $params);
+				curl_setopt ( $ch, CURLOPT_SSLVERSION, 6 );
+				//curl_setopt ( $ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 );
+        
+				if (!($response = curl_exec($ch))) {
+					//Mage::log('Error: Erro na execucao! ', null, 'traycheckout.log');
+					if(curl_errno($ch)){
+						//Mage::log('Error '.curl_errno($ch).': '. curl_error($ch), null, 'traycheckout.log');
+					}else{
+						//Mage::log('Error : '. curl_error($ch), null, 'traycheckout.log');
+					}
+					curl_close ( $ch );
+					exit();    
+        		}
+        
+        		$httpCode = curl_getinfo ( $ch, CURLINFO_HTTP_CODE );
+        
+        		curl_close($ch); 
+        
+				$responseData = new WC_Yapay_Intermediador_Responses();
+
+				$paramResponse["response_body"] = $response;
+				$paramResponse["response_url"] = $urlPost;
+        
+        		$responseData->addResponse($paramResponse,$environment);
+
+    			$order->add_order_note('Enviado para Yapay o código de rastreio: ' . $code);
+
+    			update_post_meta( $order_id, '_my_field_slug', $code );
+
+			}
+        }
+        break;
+      }
+    }
+}
+///////////////////////////////// ENVIAR RASTREAMENTO CORREIOS AUTOMATICAMENTE ////////////////////////////////////
