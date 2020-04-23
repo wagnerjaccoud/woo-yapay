@@ -595,7 +595,7 @@ add_action( 'wp_ajax_nopriv_sendRastreioYapay', 'sendRastreioYapay' );
 ///////////////////////////////// ENVIAR RASTREAMENTO CORREIOS AUTOMATICAMENTE ////////////////////////////////////
 add_filter( 'woocommerce_new_order_note_data', array( $this, 'enviarRastreioYapay' ) );
 
-public function enviarRastreioYapay($data) {
+function enviarRastreioYapay($data) {
     $note        = $data['comment_content'];
     $order_id    = $data['comment_post_ID'];
     $valid_terms = array(
