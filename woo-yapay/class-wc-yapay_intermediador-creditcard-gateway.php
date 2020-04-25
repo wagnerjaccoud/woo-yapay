@@ -1,7 +1,7 @@
 <?php
 
 if ( ! defined( 'ABSPATH' ) ) {
-	exit; // Exit if accessed directly.
+    exit; // Exit if accessed directly.
 }
 
 if ( ! class_exists( 'WC_Yapay_Intermediador_Creditcard_Gateway' ) ) :
@@ -244,7 +244,7 @@ class WC_Yapay_Intermediador_Creditcard_Gateway extends WC_Payment_Gateway {
         $params["finger_print"] = $_POST["finger_print"];
 
         $params["token_account"] = $this->get_option("token_account");
-		$params['transaction[free]']= "WOOCOMMERCE_INTERMEDIADOR_v0.6.0";
+        $params['transaction[free]']= "WOOCOMMERCE_INTERMEDIADOR_v0.6.0";
         $params["customer[name]"] = $_POST["billing_first_name"] . " " . $_POST["billing_last_name"];
         $params["customer[cpf]"] = $_POST["billing_cpf"];
 
@@ -387,8 +387,7 @@ class WC_Yapay_Intermediador_Creditcard_Gateway extends WC_Payment_Gateway {
         
         $tcRequest = new WC_Yapay_Intermediador_Request();
         
-        $tcResponse = $tcRequest->requestData("v2/transactions/pay_complete",$params,$this->get_option("environment"),false);
-                    
+        $tcResponse = $tcRequest->requestData("v2/transactions/pay_complete",$params,$this->get_option("environment"),false);                    
                 
         if($tcResponse->message_response->message == "success"){
             // Remove cart.  
@@ -404,7 +403,27 @@ class WC_Yapay_Intermediador_Creditcard_Gateway extends WC_Payment_Gateway {
 
             
             $transactionData->addTransaction($transactionParams);
-
+            
+            //sleep(1);
+            $parametros["token_account"] = $this->get_option("token_account");
+            $parametros["token_transaction"] = (string)$tcResponse->data_response->transaction->token_transaction;
+            
+            $tcPayment = new WC_Yapay_Intermediador_Creditcard_Gateway();
+            
+            $tcRequest = new WC_Yapay_Intermediador_Request();
+            
+            $tcResponse = $tcRequest->requestData("v2/transactions/get_by_token",$parametros,$tcPayment->get_option("environment"));
+            $codeStatus = intval($tcResponse->data_response->transaction->status_id);
+    if($codeStatus == 4 ){
+        $errors[] = "<strong>Atenção!</strong> O pagamento não foi autorizado pela sua operadora de cartão de crédito. Verifique se os dados informados no ato do pagamento estão corretos, se estiver, consulte sua operadora referente a limites e autorizações para realizar pagamentos online.";
+        $errors[] = "<strong>Tente novamente inserindo um novo cartão ou revise os dados inseridos.</strong>";
+        update_post_meta( $order_id, 'link_pagamento', 'https://tc.intermediador.yapay.com.br/transactions/pay_login/'.$parametros["token_transaction"] );
+        $this->add_error($errors);
+    }elseif($codeStatus == 89){
+            $errors[] = "<strong>Aviso!</strong> Infelizmente seu pagamento foi negado ou recusado.";
+            $errors[] = "Tente novamente inserindo um novo cartão ou revise os dados inserido";
+            $this->add_error($errors);
+            }else{
 
             if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '2.1', '>=' ) ) {
                 WC()->cart->empty_cart();
@@ -427,7 +446,7 @@ class WC_Yapay_Intermediador_Creditcard_Gateway extends WC_Payment_Gateway {
                     // 'redirect' => add_query_arg( array( 'order' => $order->id, 'key' => $order->order_key, 'use_shipping' => $use_shipping ), get_permalink( woocommerce_get_page_id( 'pay' ) ) )
                 );
             }
-
+        }
         }else{
             $errors = array();
             if(isset($tcResponse->error_response->general_errors)){
@@ -485,7 +504,7 @@ class WC_Yapay_Intermediador_Creditcard_Gateway extends WC_Payment_Gateway {
     
     function luhn($ccNumberTc) {
         $sum = 0;
-	foreach(array_reverse(str_split($ccNumberTc)) as $i => $num){
+    foreach(array_reverse(str_split($ccNumberTc)) as $i => $num){
             $num = ($i % 2 != 0) ? intval($num) * 2 : $num;
             if($num > 9){
                 $num = str_split(strval($num));
@@ -493,7 +512,7 @@ class WC_Yapay_Intermediador_Creditcard_Gateway extends WC_Payment_Gateway {
             }
             $sum += $num;
         }
-	return ($sum % 10 == 0) ? true : false;
+    return ($sum % 10 == 0) ? true : false;
     }
     
     public function receipt_page( $order_id ) {
@@ -522,7 +541,7 @@ class WC_Yapay_Intermediador_Creditcard_Gateway extends WC_Payment_Gateway {
         
         $html = "";
         $html .= "<ul class='order_details'>";
-		$html .= "<li>";
+        $html .= "<li>";
         $html .= "<strong>Seu pagamento será processado e analisado. Em breve receberá uma notificação.</strong>";
         $html .= "</li>";
         $html .= "<li>";
