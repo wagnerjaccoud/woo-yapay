@@ -593,7 +593,7 @@ add_action( 'wp_ajax_sendRastreioYapay', 'sendRastreioYapay' );
 add_action( 'wp_ajax_nopriv_sendRastreioYapay', 'sendRastreioYapay' );
 
 ///////////////////////////////// ENVIAR RASTREAMENTO CORREIOS AUTOMATICAMENTE ////////////////////////////////////
-add_filter( 'woocommerce_new_order_note_data', array( 'enviarRastreioYapay' );
+add_filter( 'woocommerce_new_order_note_data', 'enviarRastreioYapay' );
 
 function enviarRastreioYapay($data) {
     $note        = $data['comment_content'];
@@ -615,7 +615,7 @@ function enviarRastreioYapay($data) {
 			if($gateway == 'wc_yapay_intermediador_cc' || $gateway == 'wc_yapay_intermediador_bs' ){
 
 				include_once("includes/class-wc-yapay_intermediador-transactions.php");
-    				include_once("includes/class-wc-yapay_intermediador-request.php");
+    			include_once("includes/class-wc-yapay_intermediador-request.php");
 
 				switch ($order->payment_method) {
 					case "wc_yapay_intermediador_bs": $tcConfig = new WC_Yapay_Intermediador_Bankslip_Gateway(); break;
